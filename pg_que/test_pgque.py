@@ -13,6 +13,10 @@ async def test_queue():
     for n in range(10):
         await queue.send_message({'num': n})
 
-    for n in range(11):
-        m = await queue.receive_messages()
+    more_messages = True
+    while more_messages:
+        m = await queue.receive_messages(batch_size=6)
         print(m)
+        if not m:
+            print('done')
+            more_messages = False

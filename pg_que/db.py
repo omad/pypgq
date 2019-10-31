@@ -30,6 +30,15 @@ class Boss:
                     decoder=json.loads,
                     schema='pg_catalog'
                 )
+        # TODO Set up some of the housekeeping tasks
+        loop = asyncio.get_running_loop()
+        loop.call_later(600, self.prune_queue)
+
+    async def prune_queue(self):
+        loop = asyncio.get_running_loop()
+        loop.call_later(600, self.prune_queue)
+        async with self.pool.acquire() as conn:
+            pass
 
     async def stop(self):
         await self.conn.close()
