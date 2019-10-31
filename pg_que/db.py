@@ -1,58 +1,80 @@
 import asyncio
-import uuid
+import json
+from datetime import timedelta
 
 import asyncpg
+import uuid
 
 from pg_que import plans
 
 SCHEMA = 'pypgq'
 DEFAULT_OPTS = {}
 
-async def run():
-    values = await conn.fetch('''SELECT * FROM mytable''')
-
-
 
 class Boss:
     def __init__(self, connstring):
         self.connstring = connstring
-        self.next_job_command = plans.fetchNextJob(SCHEMA)
-        self.insert_job_command = plans.insertJob(SCHEMA)
-        self.conn = None
-        pass
+        self.pool = None
+
+    async def run(self):
+        values = await self.conn.fetch('''SELECT * FROM mytable''')
 
     async def start(self):
-        self.conn = await asyncpg.connect(user='user', password='password',
-                                     database='database', host='127.0.0.1')
+        self.pool = await asyncpg.create_pool(#user='user', password='password',
+                                          database='pypgq', host='127.0.0.1')
+        async with self.pool.acquire() as conn:
+            for name in ('json', 'jsonb'):
+                await conn.set_type_codec(
+                    name,
+                    encoder=json.dumps,
+                    decoder=json.loads,
+                    schema='pg_catalog'
+                )
 
     async def stop(self):
         await self.conn.close()
 
-    async def fetch(self, name, batch_size=1):
-        jobs = await self.conn.fetch(self.next_job_command, name, batch_size )
+    def get_queue(self, name):
+        return Queue(self.pool, name)
+
+
+class Queue:
+    def __init__(self, pool, name):
+        self.next_job_command = plans.fetchNextJob(SCHEMA)
+        self.insert_job_command = plans.insertJob(SCHEMA)
+        self.pool = pool
+        self.name = name
+
+    async def receive_messages(self, batch_size=1):
+        async with self.pool.acquire() as conn:
+            jobs = await conn.fetch(self.next_job_command, self.name, batch_size)
         return jobs
 
-    async def publish(self, name, data, options=None):
+    async def send_message(self, data, options=None):
         if options is None:
             options = DEFAULT_OPTS.copy()
 
         retry_limit = 1
         retry_delay = 1
-        retry_backoff = 1
+        retry_backoff = False
         priority = 0
         id = uuid.uuid4()
         start_after = None
-        expireIn = None
+        expireIn = timedelta(days=7)
         singletonKey = None
         singletonSeconds = None
         singletonOffset = None
 
-        #  ords! [1,  2,    3,        4,           5,           6,        7,    8,            9,                10,              11,         12          ]
-        values = [id, name, priority, retry_limit, start_after, expireIn, data, singletonKey, singletonSeconds, singletonOffset, retry_delay, retry_backoff];
+        #  ords! [1,  2,         3,        4,           5,           6,        7,    8,            9,
+        values = [id, self.name, priority, retry_limit, start_after, expireIn, data, singletonKey, singletonSeconds,
+                  # 10,            11,         12          ]
+                  singletonOffset, retry_delay, retry_backoff]
 
-        return await self.conn.fetchval(self.insert_job_command, *values)
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(self.insert_job_command, *values)
 
 
+class Message:
     async def complete(self, id):
         pass
 
@@ -63,5 +85,5 @@ class Boss:
         pass
 
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(run())
+if __name__ == '__main__':
+    asyncio.run(run())
