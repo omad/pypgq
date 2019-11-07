@@ -1,6 +1,11 @@
+--
+-- The SQL in this file is used to create and destroy database objects for PyPGQ
+--
+-- It is loaded and run by the `aiosql` library, which splits based on `name:` tags
+--
 
-DROP SCHEMA pypgq CASCADE;
-
+-- name: create-schema#
+-- create the schema, types and tables
 CREATE SCHEMA IF NOT EXISTS pypgq;
 
 
@@ -51,10 +56,6 @@ CREATE INDEX job_fetch ON pypgq.job (priority desc, createdOn, id) WHERE state <
 
 
 
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-
-
-
-
+-- name: delete-everything#
+-- Drop the entire schema
+DROP SCHEMA pypgq CASCADE;

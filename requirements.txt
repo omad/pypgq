@@ -1,0 +1,4 @@
+asyncpg
+aiosql
+psycopg2
+click

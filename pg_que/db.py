@@ -1,9 +1,9 @@
 import asyncio
 import json
+import uuid
 from datetime import timedelta
 
 import asyncpg
-import uuid
 
 from pg_que import plans
 
@@ -20,8 +20,7 @@ class Boss:
         values = await self.conn.fetch('''SELECT * FROM mytable''')
 
     async def start(self):
-        self.pool = await asyncpg.create_pool(#user='user', password='password',
-                                          database='pypgq', host='127.0.0.1')
+        self.pool = await asyncpg.create_pool(self.connstring)
         async with self.pool.acquire() as conn:
             for name in ('json', 'jsonb'):
                 await conn.set_type_codec(
@@ -30,6 +29,7 @@ class Boss:
                     decoder=json.loads,
                     schema='pg_catalog'
                 )
+        await self.init_db()
         # TODO Set up some of the housekeeping tasks
         loop = asyncio.get_running_loop()
         loop.call_later(600, self.prune_queue)
@@ -45,6 +45,9 @@ class Boss:
 
     def get_queue(self, name):
         return Queue(self.pool, name)
+
+    async def init_db(self):
+        pass
 
 
 class Queue:
@@ -92,7 +95,3 @@ class Message:
 
     async def cancel(self, id):
         pass
-
-
-if __name__ == '__main__':
-    asyncio.run(run())
