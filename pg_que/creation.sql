@@ -12,14 +12,14 @@ CREATE SCHEMA IF NOT EXISTS pypgq;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE  IF NOT EXISTS pypgq.version ( version text primary key );
 
-CREATE TYPE pypgq.job_state AS ENUM ('created','retry','active','complete','expired','cancelled', 'failed');
+CREATE TYPE pypgq.message_state AS ENUM ('created','retry','active','completed','expired','cancelled', 'failed');
 
-CREATE TABLE pypgq.job (
+CREATE TABLE pypgq.message (
   id uuid primary key not null default gen_random_uuid(),
   name text not null,
   priority integer not null default(0),
   data jsonb,
-  state pypgq.job_state not null default('created'),
+  state pypgq.message_state not null default('created'),
   retryLimit integer not null default(0),
   retryCount integer not null default(0),
   retryDelay integer not null default(0),
@@ -33,12 +33,13 @@ CREATE TABLE pypgq.job (
   completedOn timestamp with time zone
 );
 
--- clone job table for archived
-CREATE TABLE pypgq.archive (LIKE pypgq.job);
+
+-- clone message table for archived
+CREATE TABLE pypgq.archive (LIKE pypgq.message);
 ALTER TABLE pypgq.archive ADD archivedOn timestamptz NOT NULL DEFAULT now();
 CREATE INDEX archive_id_idx ON pypgq.archive(id);
 
-CREATE INDEX job_name ON pypgq.job (name text_pattern_ops);
+CREATE INDEX message_name ON pypgq.message (name text_pattern_ops);
 
 
 -- one time truncate because previous schema was inserting each version
@@ -46,16 +47,21 @@ TRUNCATE TABLE pypgq.version;
 INSERT INTO pypgq.version(version) values('0.0.1');
 
 
-ALTER TABLE pypgq.job ALTER COLUMN state SET DATA TYPE pypgq.job_state USING state::pypgq.job_state;
-CREATE UNIQUE INDEX job_singletonKey ON pypgq.job (name, singletonKey) WHERE state < 'complete' AND singletonOn IS NULL;
-CREATE UNIQUE INDEX job_singletonOn ON pypgq.job (name, singletonOn) WHERE state < 'expired' AND singletonKey IS NULL;
-CREATE UNIQUE INDEX job_singletonKeyOn ON pypgq.job (name, singletonOn, singletonKey) WHERE state < 'expired';
+ALTER TABLE pypgq.message ALTER COLUMN state SET DATA TYPE pypgq.message_state USING state::pypgq.message_state;
+-- # anything with singletonKey means "only 1 message can be queued or active at a time"
+CREATE UNIQUE INDEX message_singletonKey ON pypgq.message (name, singletonKey) WHERE state < 'complete' AND singletonOn IS NULL;
+-- # anything with singletonOn means "only 1 message within this time period, queued, active or completed"
+CREATE UNIQUE INDEX message_singletonOn ON pypgq.message (name, singletonOn) WHERE state < 'expired' AND singletonKey IS NULL;
+
+-- anything with both singletonOn and singletonKey means "only 1 message within this time period with this key, queued, active or completed"
+CREATE UNIQUE INDEX message_singletonKeyOn ON pypgq.message (name, singletonOn, singletonKey) WHERE state < 'expired';
 
 
-CREATE INDEX job_fetch ON pypgq.job (priority desc, createdOn, id) WHERE state < 'active';
+CREATE INDEX message_fetch ON pypgq.message (priority desc, createdOn, id) WHERE state < 'active';
 
 
 
 -- name: delete-everything#
 -- Drop the entire schema
-DROP SCHEMA pypgq CASCADE;
+
+-- DROP SCHEMA pypgq CASCADE;

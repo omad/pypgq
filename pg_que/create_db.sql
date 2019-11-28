@@ -1,4 +1,6 @@
-
+-- This is the schema copied from PgBoss
+--
+-- It is not used here, but might be good for reference.
 CREATE SCHEMA pypgq;
 ALTER TABLE pypgq.job ADD singletonOn timestamp without time zone;
 ALTER TABLE pypgq.job ADD CONSTRAINT job_singleton UNIQUE(name, singletonOn);
