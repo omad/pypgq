@@ -12,15 +12,6 @@ class states:
 completedmessagePrefix = f'__state__${states.completed}__'
 
 
-def create(schema):
-    return [
-        createIndexmessageName(schema),
-        createIndexSingletonOn(schema),
-        createIndexSingletonKeyOn(schema),
-        createIndexSingletonKey(schema)
-    ]
-
-
 def delete_queue(schema):
     return f'''DELETE FROM {schema}.message WHERE name = $1'''
 
@@ -81,25 +72,6 @@ def build_json_completion_object(with_response):
     'completedOn', completedOn,
     'failed', CASE WHEN state = '{states.completed}' THEN false ELSE true END
   )'''
-
-
-RETRY_COMPLETED_ON_CASE = f'''CASE
-          WHEN retryCount < retryLimit
-          THEN NULL
-          ELSE now()
-          END'''
-
-RETRY_START_AFTER_CASE = f'''CASE
-          WHEN retryCount = retryLimit THEN startAfter
-          WHEN NOT retryBackoff THEN now() + retryDelay * interval '1'
-          ELSE now() +
-            (
-                retryDelay * 2 ^ LEAST(16, retryCount + 1) / 2
-                +
-                retryDelay * 2 ^ LEAST(16, retryCount + 1) / 2 * random()
-            )
-            * interval '1'
-          END'''
 
 
 def complete_message(schema):
@@ -254,3 +226,22 @@ def count_states(schema):
     WHERE name NOT LIKE '{completedmessagePrefix}%'
     GROUP BY rollup(name), rollup(state)
   '''
+
+
+RETRY_COMPLETED_ON_CASE = f'''CASE
+          WHEN retryCount < retryLimit
+          THEN NULL
+          ELSE now()
+          END'''
+
+RETRY_START_AFTER_CASE = f'''CASE
+          WHEN retryCount = retryLimit THEN startAfter
+          WHEN NOT retryBackoff THEN now() + retryDelay * interval '1'
+          ELSE now() +
+            (
+                retryDelay * 2 ^ LEAST(16, retryCount + 1) / 2
+                +
+                retryDelay * 2 ^ LEAST(16, retryCount + 1) / 2 * random()
+            )
+            * interval '1'
+          END'''
